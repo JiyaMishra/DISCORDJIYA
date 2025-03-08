@@ -5,16 +5,17 @@ import pytz
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
+
 load_dotenv()
 
-BOT_SECRET = os.getenv("DISCORD_TOKEN")
-AI_SECRET = os.getenv("GEMINI_API_KEY")
+BOT_SECRET = os.getenv('BOT_SECRET')
+AI_SECRET = os.getenv('AI_SECRET')
 
 if not BOT_SECRET or not AI_SECRET:
     raise ValueError("Missing Discord token or Gemini API key.")
 
 genai.configure(api_key=AI_SECRET)
-ai_model = genai.GenerativeModel('gemini-pro')
+ai_model = genai.GenerativeModel('gemini-2.0-flash')
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -62,15 +63,12 @@ async def check_for_reminders():
                 if reminder['time'] <= now:
                     await send_a_reminder(user_id, reminder)
         await asyncio.sleep(60)
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
     bot.loop.create_task(check_for_reminders())
-@bot.event
-async def on_member_join(member):
-    channel = member.guild.system_channel
-    if channel:
-        await channel.send(f"Welcome, {member.mention}!")
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -103,6 +101,7 @@ async def on_message(message):
                 for i in range(len(options)):
                     await poll_message.add_reaction(f"{i+1}️⃣")
                 polls[poll_message.id] = {"question": question, "options": [o.strip() for o in options], "votes": {}}
+
     elif content.startswith("!summarize"):
         text = message.content[len("!summarize"):].strip()
         try:
@@ -110,6 +109,7 @@ async def on_message(message):
             await message.channel.send(response.text)
         except Exception as e:
             await message.channel.send(f"Error: {e}")
+
     elif content.startswith("!play"):
         song_name = message.content[len("!play"):].strip()
         server_id = message.guild.id
@@ -117,6 +117,7 @@ async def on_message(message):
             music_queues[server_id] = []
         music_queues[server_id].append(song_name)
         await message.channel.send(f"Added '{song_name}' to the queue.")
+
     elif content.startswith("!queue"):
         server_id = message.guild.id
         if server_id in music_queues and music_queues[server_id]:
@@ -124,6 +125,19 @@ async def on_message(message):
             await message.channel.send(f"Music Queue:\n{queue_list}")
         else:
             await message.channel.send("The queue is empty.")
+
+    elif content.startswith("!welcome"):
+        member_name = message.content[len("!welcome"):].strip()
+        await message.channel.send(f"Welcome to the server, {member_name}!")
+
+    elif content.startswith("!delete_poll"):
+        # Command to delete a poll
+        parts = message.content.split(" ", 1)
+        if len(parts) == 2:
+            poll_id = int(parts[1])
+            if poll_id in polls:
+                del polls[poll_id]
+                await message.channel.send(f"Poll {poll_id} has been deleted.")
 
 @bot.event
 async def on_reaction_add(reaction, user):
@@ -136,4 +150,27 @@ async def on_reaction_add(reaction, user):
             if reaction.message.id not in poll["votes"]:
                 poll["votes"][reaction.message.id] = {}
             poll["votes"][reaction.message.id][user.id] = option_index
+
+@bot.event
+async def on_message_edit(before, after):
+    if before.content != after.content:
+        print(f"Message edited: {before.content} -> {after.content}")
+
+
+@bot.event
+async def on_member_join(member):
+    # Get the system channel where the welcome message should be sent
+    channel = member.guild.system_channel
+    if channel:
+        # Prepare a personalized welcome message
+        join_date = member.created_at.strftime("%B %d, %Y")  # Format account creation date
+        welcome_message = f"Welcome to the server,it is so nice to have you, {member.mention}! 🎉\n" \
+                          f"Account created on: {join_date}\n" \
+                          f"Glad to have you here! Feel free to explore and make yourself at home. 😊"
+
+        # Send the personalized message to the system channel
+        await channel.send(welcome_message)
+
+
 bot.run(BOT_SECRET)
+
